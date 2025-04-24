@@ -1,0 +1,136 @@
+---
+title: "Dissertation"
+author: "Arianne See"
+date: '2025-02-06'
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, 
+                      message=FALSE, warning = FALSE)
+```
+
+##Prepare data
+```{r}
+setwd("~/Dissertation")
+
+##Clean data
+nap <- read.csv("Dissertation Data.csv")
+nap$Country <- iconv(nap$Country, from = "UTF-8", to = "ASCII//TRANSLIT")
+nap$Country <- gsub("\\s+", " ", nap$Country)
+
+library(dplyr)
+
+##Share of women in parliament (lower)
+womenparlia <- read.csv("women share.csv")
+womenparlia <- womenparlia %>% rename(Country = Entity)
+
+##Combining the two datasets
+nap1_1 <- left_join(nap,womenparlia, by ="Country")
+
+##Gender of head of the parliament
+genderhead <- read.csv("gender-of-the-head-of-government.csv")
+genderhead <- genderhead %>% rename(Country = Entity)
+
+##Combining the two datasets
+nap2_1 <- left_join(nap1_1,genderhead, by ="Country")
+nap2_1 <- subset(nap2_1, select=-c(Code.x, Code.y))
+
+##Representation of women in the upper chamber of parliament
+womenupper <- read.csv("women upper chamber.csv")
+womenupper <- womenupper %>% rename(Country = Entity)
+
+##Combining the two datasets
+nap3_1 <- left_join(nap2_1,womenupper, by ="Country")
+
+##Level of democracy in the country
+dem <- read.csv("electoral-democracy-index.csv")
+dem <- dem %>% rename(Country = Entity)
+
+##Combining the two datasets
+nap4_1 <- left_join(nap3_1,dem, by ="Country")
+
+##Women's participation in Civil Society
+womencs <- read.csv("women-civil-society-participation-index.csv")
+womencs <- womencs %>% rename(Country = Entity)
+
+##Combining the two datasets
+nap5_1 <- left_join(nap4_1, womencs, by="Country")
+
+##Whether country signed or ratified CEDAW
+cedaw <- read.csv("CEDAW.csv")
+
+##Combining the two datasets
+nap6_1 <- left_join(nap5_1, cedaw, by="Country")
+
+##Armed conflict
+armedconflict <- read.csv("locations-of-ongoing-armed-conflicts.csv")
+
+##Examine if country has experienced recent conflict or ongoing conflict
+armedconflict_filtered <- armedconflict %>%
+  filter(armedconflict$Year >= 1990 & Year <= 2023)
+armedconflict_filtered <- armedconflict_filtered %>% rename(Country = Entity) ##Clean data
+armedconflict_filtered <- armedconflict_filtered %>% select(-Code)
+colnames(armedconflict_filtered)
+armedconflict_filtered <- armedconflict_filtered %>% rename(Conflict = Country.where.conflict.took.place...Conflict.type..all)
+
+armedconflict_filtered <- armedconflict_filtered %>%
+  group_by(Country) %>%  
+  mutate(Conflict_1990_2025 = ifelse(any(Conflict == 1), 1, 0)) %>%  
+  ungroup()
+
+armedconflict_final <- armedconflict_filtered %>%
+  group_by(Country) %>%
+  summarise(Conflict_1990_2025 = max(Conflict_1990_2025, na.rm = TRUE)) %>%
+  ungroup()
+
+##Combining the two datasets
+nap7_1 <- left_join(nap6_1, armedconflict_final, by="Country")
+
+##Women's participation in Civil Society
+gdp <- read.csv("gdp.csv")
+
+##Combining the two datasets
+nap_final_1 <- left_join(nap7_1, gdp, by="Country")
+```
+
+##Clean final dataset
+```{r}
+colnames(nap_final_1)
+nap_final_1 <- nap_final_1 %>% rename(NAP = NAP.Adopted..0.or.1.)
+nap_final_1 <- nap_final_1 %>% rename(Women_CS_Part = Women.s.civil.society.participation.index..best.estimate..aggregate..average.)
+nap_final_1 <- nap_final_1 %>% rename(Lowerchamber = Lower.chamber.female.legislators..aggregate..average.)
+nap_final_1 <- nap_final_1 %>% rename(Upperchamber = X16.7.1...Ratio.for.female.members.of.parliaments..Ratio.of.the.proportion.of.women.in.parliament.in.the.proportion.of.women.in.the.national.population.with.the.age.of.eligibility.as.a.lower.bound.boundary...Upper.Chamber...SG_DMK_PARLMP_UC)
+nap_final_1 <- nap_final_1 %>% rename(democracy = Electoral.democracy.index..best.estimate..aggregate..average.)
+nap_final_1 <- nap_final_1 %>% rename(gdp = GDP.per.capita..PPP..constant.2021.international...)
+
+```
+
+##Looking at models
+```{r}
+colnames(nap_final_1)
+
+library(car)
+
+women_factors_model_1 <- glm(NAP ~ Lowerchamber + Woman.head.of.government + Upperchamber
+                + Women_CS_Part + CEDAW, 
+                 data = nap_final_1, family = binomial)
+
+summary(women_factors_model_1)
+
+country_indicators_model_1 <- glm(NAP ~ democracy + Conflict_1990_2025 +gdp, 
+                 data = nap_final_1, family = binomial)
+summary(country_indicators_model_1)
+
+vif(women_factors_model_1)
+vif(country_indicators_model_1)
+
+##Find AME
+library(margins)
+ame_women <- margins(women_factors_model_1)
+summary(ame_women)
+
+ame_country <- margins(country_indicators_model_1)
+summary(ame_country)
+```
+
