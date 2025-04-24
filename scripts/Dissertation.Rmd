@@ -1,6 +1,5 @@
 ---
 title: "Dissertation"
-author: "Arianne See"
 date: '2025-02-06'
 output: word_document
 ---
